@@ -3,19 +3,17 @@ name: CI/CD Pipeline
 on:
   push:
     branches:
-      - main
-      - development   # <- added
+      - development
   pull_request:
     branches:
-      - main
-      - development   # <- added
+      - development
 
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.10.12]   # Python version used in the project
+        python-version: [3.10.12]  # Define Python versions here
     services:
       postgres:
         image: postgres:latest
@@ -26,12 +24,11 @@ jobs:
         ports:
           - 5432:5432
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -58,7 +55,6 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     environment: production
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -76,16 +72,16 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           push: true
-          tags: jesusgaud/user_management:${{ github.sha }}   # <--- updated with your DockerHub repo and image naming
+          tags: jesusgaud/user_management:${{ github.sha }}
           platforms: linux/amd64,linux/arm64
           cache-from: type=registry,ref=jesusgaud/user_management:cache
           cache-to: type=inline,mode=max
 
-      - name: Scan the Docker image for vulnerabilities
+      - name: Scan the Docker image
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: jesusgaud/user_management:${{ github.sha }}
           format: 'table'
-          exit-code: '1'    # fail the workflow if vulnerabilities found
+          exit-code: '1'  # fail if vulnerabilities found
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
