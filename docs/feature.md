@@ -72,4 +72,4 @@ Confirm that a new user can be registered through the `/register` endpoint and i
 **Expected Result**
 The user record should be saved in the database with all fields accurately recorded.
 **Screenshot Evidence**
-![User Successfully Registered](docs/screenshots/user-registration-success.png)
+![User Successfully Registered](screenshots/user-registration-success.png)
