@@ -33,6 +33,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -62,17 +64,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - name: Checkout code (pull request)
-        if: github.event_name == 'pull_request'
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-
-      - name: Checkout code (non-PR)
-        if: github.event_name != 'pull_request'
-        uses: actions/checkout@v4
-        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
       - name: Set up Docker Buildx
@@ -88,7 +83,9 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           push: true
-          tags: jesusgaud/user_management:${{ github.sha }}
+          tags: |
+            jesusgaud/user_management:${{ github.sha }}
+            jesusgaud/user_management:latest
           platforms: linux/amd64,linux/arm64
 
       - name: Scan the Docker image
@@ -96,6 +93,6 @@ jobs:
         with:
           image-ref: jesusgaud/user_management:${{ github.sha }}
           format: 'table'
-          exit-code: '1'  # Fail if vulnerabilities found
+          exit-code: '1'
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
