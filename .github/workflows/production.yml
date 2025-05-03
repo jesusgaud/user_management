@@ -62,11 +62,18 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - name: Checkout code
+      - name: Checkout code (pull request)
+        if: github.event_name == 'pull_request'
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Ensure full Git history is available
-          ref: ${{ github.event.pull_request.head.ref || github.sha }}  # Correctly fetch PR refs or fallback to commit SHA
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Checkout code (non-PR)
+        if: github.event_name != 'pull_request'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
