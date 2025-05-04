@@ -191,3 +191,21 @@ docker compose exec fastapi pytest --cov=app --cov-report=xml --cov-report=term-
 ```
 
 ---
+### 7. SMTP Client Tests (`test_smtp_connection.py`)
+- ✅ Mocks SMTP login, TLS, and message sending
+- 🚫 No real email traffic — safe for CI
+- 🧪 Edge case: logs and raises on SMTP failure
+
+```python
+@patch("smtplib.SMTP")
+def test_send_email_success(mock_smtp):
+    smtp = SMTPClient("smtp.example.com", 587, "user@example.com", "pass")
+    smtp.send_email("Test", "<p>Hello</p>", "to@example.com")
+    assert mock_smtp.called
+
+@patch("smtplib.SMTP", side_effect=Exception("Connection error"))
+def test_send_email_failure(mock_smtp):
+    smtp = SMTPClient("smtp.example.com", 587, "user@example.com", "pass")
+    with pytest.raises(Exception):
+        smtp.send_email("Fail", "<p>Fail</p>", "to@example.com")
+```
