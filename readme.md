@@ -81,7 +81,113 @@ This project is a containerized FastAPI-based user management system with Postgr
 
 ---
 
-## 🔜 Next Step
+### 2. Pytest Coverage Configuration
+- Installed `pytest-cov` to generate coverage metrics.
+- Updated `pytest.ini` with:
+  ```ini
+  [pytest]
+  addopts = --cov=app --cov-report=term --cov-report=xml
+  ```
+- This enables test coverage output in terminal and as `.coverage` + `coverage.xml` artifacts.
 
-We will resume with **Email Verification** testing and automation.
+### 3. GitHub Actions Integration
+- Updated `.github/workflows/production.yml` to include:
+  ```yaml
+  - name: Run tests with coverage
+    run: |
+      pip install pytest pytest-cov
+      pytest
 
+  - name: Upload coverage report artifact
+    uses: actions/upload-artifact@v4
+    with:
+      name: coverage-report
+      path: .coverage
+  ```
+
+### 4. Testing & Debugging
+- Confirmed coverage tests run in GitHub Actions.
+- Resolved `.coverage not found` by ensuring coverage file is generated.
+- Stopped long test runs via `Ctrl + C` in VS Code terminal when necessary.
+
+# 🧪 Testing Infrastructure Overview
+
+This section outlines the testing architecture used to validate the components of our FastAPI application, including test database configuration, shared test utilities, email template rendering, validators, and coverage reporting.
+
+---
+
+## 📦 1. Test Database Configuration (`conftest.py`)
+
+We use an isolated **PostgreSQL test database** during test execution. This is provisioned automatically via GitHub Actions using a service container.
+
+- `DATABASE_URL` uses `postgresql+asyncpg://user:password@localhost:5432/myappdb`
+- Tables are created and dropped using SQLAlchemy metadata during setup/teardown.
+- Database connection/session is provided via `async_session` fixture.
+
+---
+
+## 🛠️ 2. Test Common Utilities (`test_common.py` or fixtures in `conftest.py`)
+
+Common test data and reusable fixtures are defined here:
+
+- `get_test_user()` – Returns mock user data.
+- `authorized_client` – Fixture that logs in and injects auth token.
+- `template_manager` – Provides an initialized `TemplateManager` instance.
+
+---
+
+## ✉️ 3. Template Manager Tests (`test_template_manager.py`)
+
+Test cases verify email markdown rendering and inline style application using BeautifulSoup for robustness.
+
+- `test_apply_email_styles()` – Validates inline CSS tags exist (e.g. `h1`, `p`, `a`).
+- `test_read_template()` – Uses `mock_open` to simulate file read.
+- `test_render_template()` – Mocks markdown template reads and asserts rendered HTML output.
+
+Assertion strategy:
+- **Relaxed style checks** to reduce fragility.
+- Content presence verified using `.get_text()`.
+
+---
+
+## ✅ 4. Validators Tests (`test_validators.py`)
+
+Unit tests for Pydantic validators or custom validation logic.
+
+- Example: `test_email_format()`, `test_password_strength()`.
+- Test edge cases and exceptions using `pytest.raises`.
+
+---
+
+## 📊 5. Coverage Configuration (`.coveragerc`)
+
+We use a `.coveragerc` to fine-tune what gets counted in test coverage.
+
+```ini
+[run]
+omit =
+    */__init__.py
+    */migrations/*
+    */tests/*
+    */config.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    raise NotImplementedError
+```
+
+---
+
+## 📈 6. Coverage Report (`coverage.xml`)
+
+- Generated via `pytest --cov=app --cov-report=xml --cov-report=term-missing`
+- Consumed by CI and quality gates like Codecov or SonarCloud.
+
+**Tip:** To regenerate:
+```bash
+docker compose exec fastapi pytest --cov=app --cov-report=xml --cov-report=term-missing
+```
+
+---
