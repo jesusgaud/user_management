@@ -4,7 +4,7 @@ This project is a containerized FastAPI-based user management system with Postgr
 
 ---
 
-## ✅ Phase 1: Completed Setup & Manual QA Testing
+## Completed Setup & Manual QA Testing
 
 ### 🔧 Environment Setup Summary
 
@@ -230,5 +230,59 @@ The `UserCreate` model uses `UserRole.AUTHENTICATED`, which is converted to a st
 - `UserService.register_user` is monkeypatched to simulate backend behavior.
 - `httpx.AsyncClient` is used for async testing against the FastAPI test app.
 
+---
+
+# User Profile Management Feature Summary
+
+## Overview
+
+The User Profile Management feature enables authenticated users to securely view and update their own profile information. This functionality is essential for maintaining user autonomy, enhancing data accuracy, and aligning with RESTful API design patterns. We followed industry best practices, clean code principles, and adhered to SOLID and DRY standards throughout the implementation.
+
+## Scope
+
+- **Self-service endpoints**: Authenticated users can use `/users/me` to:
+  - **GET** their current profile.
+  - **PATCH** selected profile fields (e.g., name, bio, social links).
+- **Access control**: Users can only modify their own data. Admins retain full access to all user records via existing admin routes.
+- **Role enforcement**: Users cannot elevate their role (e.g., from "AUTHENTICATED" to "ADMIN").
+
+## Routes
+
+- `GET /users/me` — Fetch the currently logged-in user's profile.
+- `PATCH /users/me` — Partially update the authenticated user’s profile.
+
+These routes are protected by JWT-based authentication and leverage FastAPI’s dependency injection system to enforce permissions.
+
+## Schema Usage
+
+- **UserResponse**: Used for serializing user data in responses.
+- **UserUpdate**: Used for partial updates; includes optional fields and validation to ensure at least one field is provided.
+
+No new schemas were needed due to existing modular design.
+
+## Service Integration
+
+We reused the existing `UserService.get_by_email` and `UserService.update` methods to ensure maintainability and avoid duplication. Field-level permissions (e.g., blocking role changes) are enforced at the route level, maintaining a clear separation of concerns.
+
+## Testing Strategy
+
+Comprehensive test coverage includes:
+
+- Authentication enforcement (401 for unauthenticated access).
+- Successful profile fetch and update (200 responses).
+- Input validation errors (422 for empty or malformed requests).
+- Role-based access control (403 for unauthorized changes).
+- Admin privilege checks (admin can fetch/update others; users cannot).
+
+These tests use fixtures, token-based auth simulation, and httpx’s `AsyncClient` to mock realistic API calls.
+
+## Compliance and Quality
+
+This feature was built with production readiness in mind:
+
+- ✅ Modular architecture (routes, services, schemas).
+- ✅ Role-based access and error handling.
+- ✅ Fully covered by automated tests.
+- ✅ Compatible with existing auth and service layers.
 
 ---

@@ -68,7 +68,7 @@ async def get_user(user_id: UUID, request: Request, db: AsyncSession = Depends(g
         last_login_at=user.last_login_at,
         created_at=user.created_at,
         updated_at=user.updated_at,
-        links=create_user_links(user.id, request)  
+        links=create_user_links(user.id, request)
     )
 
 # Additional endpoints for update, delete, create, and list users follow a similar pattern, using
@@ -143,12 +143,12 @@ async def create_user(user: UserCreate, request: Request, db: AsyncSession = Dep
     existing_user = await UserService.get_by_email(db, user.email)
     if existing_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already exists")
-    
+
     created_user = await UserService.create(db, user.model_dump(), email_service)
     if not created_user:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create user")
-    
-    
+
+
     return UserResponse.model_construct(
         id=created_user.id,
         bio=created_user.bio,
@@ -179,9 +179,9 @@ async def list_users(
     user_responses = [
         UserResponse.model_validate(user) for user in users
     ]
-    
+
     pagination_links = generate_pagination_links(request, skip, limit, total_users)
-    
+
     # Construct the final response with pagination details
     return UserListResponse(
         items=user_responses,
@@ -238,10 +238,76 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), session: Async
 async def verify_email(user_id: UUID, token: str, db: AsyncSession = Depends(get_db), email_service: EmailService = Depends(get_email_service)):
     """
     Verify user's email with a provided token.
-    
+
     - **user_id**: UUID of the user to verify.
     - **token**: Verification token sent to the user's email.
     """
     if await UserService.verify_email_with_token(db, user_id, token):
         return {"message": "Email verified successfully"}
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification token")
+
+from uuid import UUID
+from fastapi import Depends, HTTPException, Request, status
+from app.dependencies import get_current_user, get_db
+from app.schemas.user_schemas import UserUpdate, UserResponse
+from app.services.user_service import UserService
+from app.utils.link_generation import create_user_links
+from sqlalchemy.ext.asyncio import AsyncSession
+
+@router.get("/users/me", response_model=UserResponse, name="get_current_user_profile")
+async def get_current_user_profile(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get the profile of the currently authenticated user.
+    """
+    user = await UserService.get_by_email(db, current_user["user_id"])
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return UserResponse.model_construct(
+        id=user.id,
+        email=user.email,
+        nickname=user.nickname,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        bio=user.bio,
+        profile_picture_url=user.profile_picture_url,
+        linkedin_profile_url=user.linkedin_profile_url,
+        github_profile_url=user.github_profile_url,
+        is_professional=user.is_professional,
+        role=user.role,
+        links=create_user_links(user.id, request)
+    )
+
+@router.patch("/users/me", response_model=UserResponse, name="update_current_user_profile")
+async def update_current_user_profile(
+    request: Request,
+    user_update: UserUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Update the profile of the current authenticated user (partial update).
+    """
+    if user_update.role is not None and current_user["role"] not in ["ADMIN", "MANAGER"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Operation not permitted")
+    update_data = user_update.model_dump(exclude_unset=True)
+    updated_user = await UserService.update(db, user_id=UUID(str(current_user["user_id"])), update_data=update_data)
+    if not updated_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return UserResponse.model_construct(
+        id=updated_user.id,
+        email=updated_user.email,
+        nickname=updated_user.nickname,
+        first_name=updated_user.first_name,
+        last_name=updated_user.last_name,
+        bio=updated_user.bio,
+        profile_picture_url=updated_user.profile_picture_url,
+        linkedin_profile_url=updated_user.linkedin_profile_url,
+        github_profile_url=updated_user.github_profile_url,
+        is_professional=updated_user.is_professional,
+        role=updated_user.role,
+        links=create_user_links(updated_user.id, request)
+    )
