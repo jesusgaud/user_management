@@ -29,6 +29,10 @@ class UserService:
             result = await session.execute(query)
             await session.commit()
             return result
+        except IntegrityError as e:
+            logger.error(f"Integrity error: {e}")
+            await session.rollback()
+            raise
         except SQLAlchemyError as e:
             logger.error(f"Database error: {e}")
             await session.rollback()
@@ -85,29 +89,33 @@ class UserService:
 
     @classmethod
     async def update(cls, session, user_id: UUID, update_data: Dict[str, str]) -> Optional[User]:
+        # Validate fields via Pydantic model (e.g., check email format, nickname length, etc.)
         try:
-            validated_data = validate_user_update_fields(update_data)
-            if not validated_data:
-                return None
-            query = update(User).where(User.id == user_id).values(**validated_data).execution_options(synchronize_session="fetch")
+            UserUpdate(**update_data)
+        except ValidationError as e:
+            logger.error(f"Validation error during user {user_id}: {e}")
+            return None
+        # Remove any protected or null fields (e.g., role, id) before update
+        validated_data = validate_user_update_fields(update_data)
+        if not validated_data:
+            return None
+        # Prepare and execute the update query
+        query = update(User).where(User.id == user_id).values(**validated_data).execution_options(synchronize_session="fetch")
+        try:
             result = await cls._execute_query(session, query)
-            if result is None:
-                return None
-            updated_user = await cls.get_by_id(session, user_id)
-            if updated_user:
-                await session.refresh(updated_user)
-                logger.info(f"User {user_id} updated successfully.")
-                return updated_user
-            else:
-                logger.error(f"User {user_id} not found after update attempt.")
-                return None
-        except IntegrityError as e:
-            logger.error(f"Database integrity error during update: {e}")
-            await session.rollback()
+        except IntegrityError as ie:
+            # If a unique constraint is violated (e.g., email conflict), let the caller handle it
             raise
-        except SQLAlchemyError as e:
-            logger.error(f"Database error during update: {e}")
-            await session.rollback()
+        if result is None:
+            return None
+        # Fetch the updated user and refresh to get latest data
+        updated_user = await cls.get_by_id(session, user_id)
+        if updated_user:
+            await session.refresh(updated_user)
+            logger.info(f"User {user_id} updated successfully.")
+            return updated_user
+        else:
+            logger.error(f"User {user_id} not found after update attempt.")
             return None
 
     @classmethod

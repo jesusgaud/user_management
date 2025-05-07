@@ -62,7 +62,7 @@ async def get_current_user_profile(request: Request, db: AsyncSession = Depends(
 async def update_current_user_profile(user_update: UserUpdate, request: Request,
                                       db: AsyncSession = Depends(get_db),
                                       current_user: dict = Depends(get_current_user)):
-    target_user = await UserService.get_by_email(db, current_user["sub"])
+    target_user = await UserService.get_by_email(db, current_user["user_id"])
     if not target_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
@@ -73,8 +73,11 @@ async def update_current_user_profile(user_update: UserUpdate, request: Request,
         update_data.pop('role')
 
     if len(update_data) == 0:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                            detail="At least one field must be provided for update")
+        # No fields to update – return validation-style error
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=[{"msg": "At least one field must be provided for update"}]
+            )
 
     try:
         updated_user = await UserService.update(db, target_user.id, update_data)
