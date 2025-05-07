@@ -51,7 +51,6 @@ async def test_update_user_email_access_allowed(async_client, admin_user, admin_
     assert response.status_code == 200
     assert response.json()["email"] == updated_data["email"]
 
-
 @pytest.mark.asyncio
 async def test_delete_user(async_client, admin_user, admin_token):
     headers = {"Authorization": f"Bearer {admin_token}"}
@@ -93,7 +92,7 @@ async def test_login_success(async_client, verified_user):
         "password": "MySuperPassword$1234"
     }
     response = await async_client.post("/login/", data=urlencode(form_data), headers={"Content-Type": "application/x-www-form-urlencoded"})
-    
+
     # Check for successful login response
     assert response.status_code == 200
     data = response.json()
@@ -143,6 +142,7 @@ async def test_login_locked_user(async_client, locked_user):
     response = await async_client.post("/login/", data=urlencode(form_data), headers={"Content-Type": "application/x-www-form-urlencoded"})
     assert response.status_code == 400
     assert "Account locked due to too many failed login attempts." in response.json().get("detail", "")
+
 @pytest.mark.asyncio
 async def test_delete_user_does_not_exist(async_client, admin_token):
     non_existent_user_id = "00000000-0000-0000-0000-000000000000"  # Valid UUID format
@@ -190,3 +190,111 @@ async def test_list_users_unauthorized(async_client, user_token):
         headers={"Authorization": f"Bearer {user_token}"}
     )
     assert response.status_code == 403  # Forbidden, as expected for regular user
+
+# New tests for Phase 5: /users/me endpoints
+
+@pytest.mark.asyncio
+async def test_get_current_user_profile_success(async_client, user, user_token):
+    headers = {"Authorization": f"Bearer {user_token}"}
+    response = await async_client.get("/users/me", headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    # The token corresponds to 'user' fixture, ensure data matches
+    assert data["id"] == str(user.id)
+    assert data["email"] == user.email
+    assert data["role"] == user.role.name
+
+@pytest.mark.asyncio
+async def test_get_current_user_profile_unauthorized(async_client):
+    # No token
+    response = await async_client.get("/users/me")
+    assert response.status_code == 401
+    # Invalid token
+    headers = {"Authorization": "Bearer invalidtoken"}
+    response = await async_client.get("/users/me", headers=headers)
+    assert response.status_code == 401
+
+@pytest.mark.asyncio
+async def test_update_current_user_profile_success(async_client, user, user_token):
+    headers = {"Authorization": f"Bearer {user_token}"}
+    new_data = {"first_name": "NewName", "last_name": "NewLast"}
+    response = await async_client.put("/users/me", json=new_data, headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["first_name"] == "NewName"
+    assert data["last_name"] == "NewLast"
+    # Role remains unchanged
+    assert data["role"] == user.role.name
+
+@pytest.mark.asyncio
+async def test_update_current_user_profile_no_fields(async_client, user_token):
+    headers = {"Authorization": f"Bearer {user_token}"}
+    # No fields provided – should fail validation (422)
+    response = await async_client.put("/users/me", json={}, headers=headers)
+    assert response.status_code == 422
+
+@pytest.mark.asyncio
+async def test_update_current_user_profile_conflict_email(async_client, user, verified_user, user_token):
+    headers = {"Authorization": f"Bearer {user_token}"}
+    # Attempt to change email to one already used by verified_user
+    conflict_email = verified_user.email
+    response = await async_client.put("/users/me", json={"email": conflict_email}, headers=headers)
+    # The service returns None on conflict, our route returns 404
+    assert response.status_code == 404
+    assert response.json()["detail"] == "User not found"
+
+@pytest.mark.asyncio
+async def test_update_current_user_profile_ignore_role(async_client, user, user_token):
+    headers = {"Authorization": f"Bearer {user_token}"}
+    # Attempt to change role (should be ignored)
+    response = await async_client.put("/users/me", json={"role": "ADMIN"}, headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["role"] == user.role.name  # still original role
+
+@pytest.mark.asyncio
+async def test_update_profile_picture_success(async_client, user, user_token):
+    headers = {"Authorization": f"Bearer {user_token}"}
+    image_content = b"fakeimagecontent"
+    files = {"profile_picture": ("test.png", image_content, "image/png")}
+    response = await async_client.patch("/users/me/profile-picture", files=files, headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    # profile_picture_url should be set to our static path
+    assert "profile_picture_url" in data and data["profile_picture_url"]
+    assert "/profile_pictures/" in data["profile_picture_url"]
+    # Verify file saved
+    filename = data["profile_picture_url"].split("/profile_pictures/")[-1]
+    import os
+    assert os.path.exists(os.path.join("profile_pictures", filename))
+
+@pytest.mark.asyncio
+async def test_update_profile_picture_invalid_type(async_client, user_token):
+    headers = {"Authorization": f"Bearer {user_token}"}
+    # Upload a text file as profile picture (invalid)
+    files = {"profile_picture": ("test.txt", b"notanimage", "text/plain")}
+    response = await async_client.patch("/users/me/profile-picture", files=files, headers=headers)
+    assert response.status_code == 400
+    assert "Unsupported file type" in response.json().get("detail", "")
+
+@pytest.mark.asyncio
+async def test_update_profile_picture_replace(async_client, user, user_token):
+    headers = {"Authorization": f"Bearer {user_token}"}
+    # First upload a PNG
+    files1 = {"profile_picture": ("pic.png", b"img1", "image/png")}
+    response1 = await async_client.patch("/users/me/profile-picture", files=files1, headers=headers)
+    assert response1.status_code == 200
+    url1 = response1.json()["profile_picture_url"]
+    filename1 = url1.split("/profile_pictures/")[-1]
+    # Then upload a JPEG, which should replace the previous image file
+    files2 = {"profile_picture": ("pic.jpg", b"img2", "image/jpeg")}
+    response2 = await async_client.patch("/users/me/profile-picture", files=files2, headers=headers)
+    assert response2.status_code == 200
+    url2 = response2.json()["profile_picture_url"]
+    filename2 = url2.split("/profile_pictures/")[-1]
+    assert filename2 != filename1  # extension changed, so different filename
+    import os
+    # New file exists...
+    assert os.path.exists(os.path.join("profile_pictures", filename2))
+    # ...old file removed
+    assert not os.path.exists(os.path.join("profile_pictures", filename1))

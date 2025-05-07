@@ -8,6 +8,9 @@ from app.dependencies import get_settings
 from app.routers import user_routes
 from app.utils.api_description import getDescription
 
+from fastapi.staticfiles import StaticFiles
+import os
+
 app = FastAPI(
     title="User Management",
     description=getDescription(),
@@ -38,6 +41,9 @@ async def startup_event():
     from app.models import user_model  # Import model to register with Base
     await Database.create_tables()
 
+    # Create directory for profile pictures if not exists
+    os.makedirs("profile_pictures", exist_ok=True)
+
 @app.exception_handler(Exception)
 async def exception_handler(request, exc):
     return JSONResponse(
@@ -47,3 +53,6 @@ async def exception_handler(request, exc):
 
 # Register all API routes
 app.include_router(user_routes.router)
+
+# Mount static files for profile pictures
+app.mount("/profile_pictures", StaticFiles(directory="profile_pictures"), name="profile_pics")
