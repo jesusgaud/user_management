@@ -101,7 +101,8 @@ async def test_login_success(async_client, verified_user):
 
     # Use the decode_token method from jwt_service to decode the JWT
     decoded_token = decode_token(data["access_token"])
-    assert decoded_token is not None, "Failed to decode token"
+    user_id = decoded_token.get("sub")
+    assert user_id is not None, "Token missing 'sub' claim"
     assert decoded_token["role"] == "AUTHENTICATED", "The user role should be AUTHENTICATED"
 
 @pytest.mark.asyncio
@@ -239,18 +240,21 @@ async def test_update_current_user_profile_conflict_email(async_client, user, ve
     # Attempt to change email to one already used by verified_user
     conflict_email = verified_user.email
     response = await async_client.put("/users/me", json={"email": conflict_email}, headers=headers)
-    # The service returns None on conflict, our route returns 404
-    assert response.status_code == 404
-    assert response.json()["detail"] == "User not found"
+
+    # Now expecting a conflict error
+    assert response.status_code == 409
+    assert "Email already exists" in response.json().get("detail", "")
 
 @pytest.mark.asyncio
 async def test_update_current_user_profile_ignore_role(async_client, user, user_token):
     headers = {"Authorization": f"Bearer {user_token}"}
-    # Attempt to change role (should be ignored)
+    # Attempt to change role (should be ignored/rejected)
     response = await async_client.put("/users/me", json={"role": "ADMIN"}, headers=headers)
-    assert response.status_code == 200
-    data = response.json()
-    assert data["role"] == user.role.name  # still original role
+
+    assert response.status_code == 422
+    error = response.json()
+    # Ensure appropriate error message is returned
+    assert error["detail"][0]["msg"] == "At least one field must be provided for update"
 
 @pytest.mark.asyncio
 async def test_update_profile_picture_success(async_client, user, user_token):

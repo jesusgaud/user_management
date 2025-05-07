@@ -59,28 +59,33 @@ async def get_current_user_profile(request: Request, db: AsyncSession = Depends(
     return UserResponse.model_validate(user)
 
 @router.put("/users/me", response_model=UserResponse, name="update_current_user_profile", tags=["User Profile"])
-async def update_current_user_profile(user_update: UserUpdate, request: Request, db: AsyncSession = Depends(get_db), current_user: dict = Depends(get_current_user)):
-    """
-    Update the profile of the currently authenticated user.
-    """
-    user_identifier = current_user.get("user_id")
-    target_user = None
-    if user_identifier:
-        try:
-            uid = UUID(str(user_identifier))
-            target_user = await UserService.get_by_id(db, uid)
-        except Exception:
-            target_user = await UserService.get_by_email(db, str(user_identifier))
+async def update_current_user_profile(user_update: UserUpdate, request: Request,
+                                      db: AsyncSession = Depends(get_db),
+                                      current_user: dict = Depends(get_current_user)):
+    target_user = await UserService.get_by_email(db, current_user["sub"])
     if not target_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
     update_data = user_update.model_dump(exclude_unset=True)
+
     # Prevent self role changes
     if 'role' in update_data:
         update_data.pop('role')
-    updated_user = await UserService.update(db, target_user.id, update_data)
+
+    if len(update_data) == 0:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail="At least one field must be provided for update")
+
+    try:
+        updated_user = await UserService.update(db, target_user.id, update_data)
+    except IntegrityError:
+        # Duplicate email or other integrity violation – email conflict case
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already exists")
+
     if not updated_user:
-        # Could be not found or conflict (e.g., email already exists)
+        # This covers the (rare) case where the user was not found during update
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
     return UserResponse.model_validate(updated_user)
 
 @router.patch("/users/me/profile-picture", response_model=UserResponse, name="update_profile_picture", tags=["User Profile"])

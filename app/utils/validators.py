@@ -4,10 +4,10 @@ from email_validator import validate_email, EmailNotValidError
 def validate_email_address(email: str) -> bool:
     """
     Validate the email address using the email-validator library.
-    
+
     Args:
         email (str): Email address to validate.
-    
+
     Returns:
         bool: True if the email is valid, otherwise False.
     """
@@ -19,3 +19,8 @@ def validate_email_address(email: str) -> bool:
         # Email not valid, return False
         print(f"Invalid email: {e}")
         return False
+
+def validate_user_update_fields(update_data: dict) -> dict:
+    # Remove fields that should never be updated here if needed
+    protected_fields = ['role', 'id', 'created_at', 'updated_at']
+    return {key: val for key, val in update_data.items() if key not in protected_fields and val is not None}
