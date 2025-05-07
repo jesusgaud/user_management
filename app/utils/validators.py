@@ -1,21 +1,8 @@
-from builtins import bool, str
-from email_validator import validate_email, EmailNotValidError
+import re
 
-def validate_email_address(email: str) -> bool:
-    """
-    Validate the email address using the email-validator library.
-    
-    Args:
-        email (str): Email address to validate.
-    
-    Returns:
-        bool: True if the email is valid, otherwise False.
-    """
-    try:
-        # Validate and get info
-        validate_email(email)
-        return True
-    except EmailNotValidError as e:
-        # Email not valid, return False
-        print(f"Invalid email: {e}")
-        return False
+def validate_email_address(email: str) -> None:
+    """Validate email address format. Raise ValueError if invalid."""
+    email_regex = r"^[\w\.-]+@[\w\.-]+\.\w+$"
+    if not re.match(email_regex, email):
+        raise ValueError("Invalid email format")
+

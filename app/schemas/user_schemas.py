@@ -1,53 +1,35 @@
 
-from builtins import ValueError, any, bool, str
-from pydantic import BaseModel, EmailStr, Field, validator, root_validator
 from typing import Optional, List
 from datetime import datetime
-from enum import Enum
-import uuid
-import re
+from uuid import UUID
+from pydantic import BaseModel, EmailStr, HttpUrl, root_validator
 from app.models.user_model import UserRole
-from app.utils.nickname_gen import generate_nickname
-
-
-def validate_url(url: Optional[str]) -> Optional[str]:
-    if url is None:
-        return url
-    url_regex = r'^https?:\/\/[^\s/$.?#].[^\s]*$'
-    if not re.match(url_regex, url):
-        raise ValueError('Invalid URL format')
-    return url
 
 class UserBase(BaseModel):
-    email: EmailStr = Field(..., example="john.doe@example.com")
-    nickname: Optional[str] = Field(None, min_length=3, pattern=r'^[\w-]+$', example=generate_nickname())
-    first_name: Optional[str] = Field(None, example="John")
-    last_name: Optional[str] = Field(None, example="Doe")
-    bio: Optional[str] = Field(None, example="Experienced software developer specializing in web applications.")
-    profile_picture_url: Optional[str] = Field(None, example="https://example.com/profiles/john.jpg")
-    linkedin_profile_url: Optional[str] = Field(None, example="https://linkedin.com/in/johndoe")
-    github_profile_url: Optional[str] = Field(None, example="https://github.com/johndoe")
-    role: UserRole
-
-    _validate_urls = validator('profile_picture_url', 'linkedin_profile_url', 'github_profile_url', pre=True, allow_reuse=True)(validate_url)
-
-    class Config:
-        from_attributes = True
+    email: EmailStr
+    nickname: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    bio: Optional[str] = None
+    profile_picture_url: Optional[HttpUrl] = None
+    linkedin_profile_url: Optional[HttpUrl] = None
+    github_profile_url: Optional[HttpUrl] = None
+    is_professional: Optional[bool] = None
+    role: Optional[UserRole] = None
 
 class UserCreate(UserBase):
-    email: EmailStr = Field(..., example="john.doe@example.com")
-    password: str = Field(..., example="Secure*1234")
+    password: str
 
-class UserUpdate(UserBase):
-    email: Optional[EmailStr] = Field(None, example="john.doe@example.com")
-    nickname: Optional[str] = Field(None, min_length=3, pattern=r'^[\w-]+$', example="john_doe123")
-    first_name: Optional[str] = Field(None, example="John")
-    last_name: Optional[str] = Field(None, example="Doe")
-    bio: Optional[str] = Field(None, example="Experienced software developer specializing in web applications.")
-    profile_picture_url: Optional[str] = Field(None, example="https://example.com/profiles/john.jpg")
-    linkedin_profile_url: Optional[str] = Field(None, example="https://linkedin.com/in/johndoe")
-    github_profile_url: Optional[str] = Field(None, example="https://github.com/johndoe")
-    role: Optional[str] = Field(None, example="AUTHENTICATED")
+class UserUpdate(BaseModel):
+    email: Optional[EmailStr] = None
+    nickname: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    bio: Optional[str] = None
+    profile_picture_url: Optional[HttpUrl] = None
+    linkedin_profile_url: Optional[HttpUrl] = None
+    github_profile_url: Optional[HttpUrl] = None
+    role: Optional[UserRole] = None
 
     @root_validator(pre=True)
     def check_at_least_one_value(cls, values):
@@ -56,29 +38,15 @@ class UserUpdate(UserBase):
         return values
 
 class UserResponse(UserBase):
-    id: uuid.UUID = Field(..., example=uuid.uuid4())
-    email: EmailStr = Field(..., example="john.doe@example.com")
-    nickname: Optional[str] = Field(None, min_length=3, pattern=r'^[\w-]+$', example=generate_nickname())
-    is_professional: Optional[bool] = Field(default=False, example=True)
-    role: UserRole
-
-class LoginRequest(BaseModel):
-    email: str = Field(..., example="john.doe@example.com")
-    password: str = Field(..., example="Secure*1234")
-
-class ErrorResponse(BaseModel):
-    error: str = Field(..., example="Not Found")
-    details: Optional[str] = Field(None, example="The requested resource was not found.")
+    id: UUID
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    last_login_at: Optional[datetime] = None
+    links: Optional[dict] = None
 
 class UserListResponse(BaseModel):
-    items: List[UserResponse] = Field(..., example=[{
-        "id": uuid.uuid4(), "nickname": generate_nickname(), "email": "john.doe@example.com",
-        "first_name": "John", "bio": "Experienced developer", "role": "AUTHENTICATED",
-        "last_name": "Doe", "bio": "Experienced developer", "role": "AUTHENTICATED",
-        "profile_picture_url": "https://example.com/profiles/john.jpg",
-        "linkedin_profile_url": "https://linkedin.com/in/johndoe",
-        "github_profile_url": "https://github.com/johndoe"
-    }])
-    total: int = Field(..., example=100)
-    page: int = Field(..., example=1)
-    size: int = Field(..., example=10)
+    items: List[UserResponse]
+    total: int
+    page: int
+    size: int
+    links: Optional[dict]
