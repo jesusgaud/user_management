@@ -1,4 +1,3 @@
-# email_service.py
 from builtins import ValueError, dict, str
 from settings.config import settings
 from app.utils.smtp_connection import SMTPClient
