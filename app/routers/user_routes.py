@@ -24,7 +24,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Response, status, Request, UploadFile, File
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from sqlalchemy.exc import IntegrityError
 from app.dependencies import get_current_user, get_db, get_email_service, require_role
 from app.schemas.pagination_schema import EnhancedPagination
 from app.schemas.token_schema import TokenResponse
@@ -59,34 +59,44 @@ async def get_current_user_profile(request: Request, db: AsyncSession = Depends(
     return UserResponse.model_validate(user)
 
 @router.put("/users/me", response_model=UserResponse, name="update_current_user_profile", tags=["User Profile"])
-async def update_current_user_profile(user_update: UserUpdate, request: Request,
-                                      db: AsyncSession = Depends(get_db),
-                                      current_user: dict = Depends(get_current_user)):
-    target_user = await UserService.get_by_email(db, current_user["user_id"])
+async def update_current_user_profile(
+    user_update: UserUpdate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        # Try parsing user_id as UUID and lookup by ID
+        user_uuid = UUID(current_user["user_id"])
+        target_user = await UserService.get_by_id(db, user_uuid)
+    except (ValueError, TypeError):
+        # Fall back to lookup by email if user_id is not a valid UUID
+        target_user = await UserService.get_by_email(db, current_user["user_id"])
+
     if not target_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     update_data = user_update.model_dump(exclude_unset=True)
 
     # Prevent self role changes
-    if 'role' in update_data:
-        update_data.pop('role')
+    if "role" in update_data:
+        update_data.pop("role")
 
     if len(update_data) == 0:
-        # No fields to update – return validation-style error
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=[{"msg": "At least one field must be provided for update"}]
-            )
+        )
 
     try:
         updated_user = await UserService.update(db, target_user.id, update_data)
     except IntegrityError:
-        # Duplicate email or other integrity violation – email conflict case
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already exists")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already exists"
+        )
 
     if not updated_user:
-        # This covers the (rare) case where the user was not found during update
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     return UserResponse.model_validate(updated_user)
@@ -315,3 +325,45 @@ async def verify_email(user_id: UUID, token: str, db: AsyncSession = Depends(get
     """
     # Implementation for email verification (not fully shown here)
     return {"message": "Email verified successfully."}
+
+@router.put("/users/me", response_model=UserResponse, tags=["User Self Management"])
+async def update_current_user_profile(
+    request: Request,
+    user_update: UserUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    user = await UserService.get_by_id(db, current_user["user_id"])
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user_data = user_update.model_dump(exclude_unset=True)
+
+    # Prevent role changes
+    if "role" in user_data:
+        user_data.pop("role")
+
+    if not user_data:
+        raise HTTPException(status_code=422, detail=[{"msg": "At least one field must be provided for update"}])
+
+    # Check for email conflict
+    if "email" in user_data:
+        existing = await UserService.get_by_email(db, user_data["email"])
+        if existing and existing.id != user.id:
+            raise HTTPException(status_code=409, detail="Email already exists")
+
+    updated = await UserService.update(db, user.id, user_data)
+    return UserResponse.model_construct(
+        id=updated.id,
+        bio=updated.bio,
+        first_name=updated.first_name,
+        last_name=updated.last_name,
+        profile_picture_url=updated.profile_picture_url,
+        nickname=updated.nickname,
+        email=updated.email,
+        role=updated.role,
+        last_login_at=updated.last_login_at,
+        created_at=updated.created_at,
+        updated_at=updated.updated_at,
+        links=create_user_links(updated.id, request)
+    )
