@@ -3,8 +3,64 @@
 This project is a containerized FastAPI-based user management system with PostgreSQL, pgAdmin, and Nginx reverse proxy integration. It supports robust user registration, authentication, and administration features.
 
 ---
+# 🧠 Reflection: Feature Delivery and Continuous Improvement
 
-## ✅ Phase 1: Completed Setup & Manual QA Testing
+## 🔗 Key Deliverables
+
+- **5 GitHub Issues**:
+  - [#1 Swagger Docs Not Loading on localhost:8000/docs](https://github.com/jesusgaud/user_management/issues/24)
+  - [#2 Swagger JSON Payload Format Confusion](https://github.com/jesusgaud/user_management/issues/23)
+  - [#3 Swagger UI Register Request Fails with 500](https://github.com/jesusgaud/user_management/issues/22)
+  - [#4 ImportError for Base in database.py](https://github.com/jesusgaud/user_management/issues/21)
+  - [#5 Missing Table: users Not Found at Runtime](https://github.com/jesusgaud/user_management/issues/20)
+
+- **10 Tests Added** (in `test_extended_coverage.py`):
+  - `test_update_current_user_profile_success`
+  - `test_update_current_user_profile_conflict_email`
+  - `test_update_current_user_profile_ignore_role`
+  - `test_user_service_create_duplicate`
+  - `test_get_current_user_invalid_token`
+  - `test_startup_event`
+  - `test_verify_email_route`
+  - `test_enhanced_pagination_add_link`
+  - `test_send_email_success`
+  - `test_exception_handler`
+
+  ## 🧰 Technologies Used
+
+- **FastAPI**
+- **SQLAlchemy**
+- **Pydantic**
+- **Alembic**
+- **Docker & Docker Compose**
+- **Pytest**
+- **JWT Authentication**
+- **GitHub Actions (CI/CD Pipeline)**
+
+- **Feature Branch**: [`user_management`](https://github.com/jesusgaud/user_management)
+
+- **DockerHub Deployment**: [View on DockerHub](https://hub.docker.com/r/jesusgaud/user-management-api)
+
+## 🧠 Reflection Summary
+
+This feature implementation strengthened my backend development practices around secure authentication, user role management, and defensive coding with FastAPI. I enhanced the application with:
+
+- Secure update logic to restrict privilege escalation attempts via PATCH/PUT requests.
+- Validation-driven error handling using `pydantic`, HTTP status codes, and exception decorators.
+- Robust test design covering edge cases and ensuring zero regression after new feature integration.
+- CI/CD debugging including persistent coverage accuracy and test pass reliability across three runs.
+
+Working with DockerHub deployments, GitHub Actions, and FastAPI's dependency injection patterns helped deepen my DevOps, software architecture, and automation skills.
+
+## ✨ Author
+
+**Jesus Gaud**
+Backend Development
+[GitHub](https://github.com/jesusgaud) • [DockerHub](https://hub.docker.com/u/jesusgaud)
+
+---
+
+## Completed Setup & Manual QA Testing
 
 ### 🔧 Environment Setup Summary
 
@@ -45,7 +101,7 @@ This project is a containerized FastAPI-based user management system with Postgr
 
 ```json
 {
-  "email": "jesusgaud@gmail.com",
+  "email": "testemail@gmail.com",
   "nickname": "clever_fox_821",
   "first_name": "Jesus",
   "last_name": "Gaud",
@@ -109,6 +165,12 @@ This project is a containerized FastAPI-based user management system with Postgr
 - Confirmed coverage tests run in GitHub Actions.
 - Resolved `.coverage not found` by ensuring coverage file is generated.
 - Stopped long test runs via `Ctrl + C` in VS Code terminal when necessary.
+
+To run the test suite with coverage reporting:
+
+```bash
+docker compose exec fastapi pytest --cov=app --cov-report=term-missing
+```
 
 # 🧪 Testing Infrastructure Overview
 
@@ -185,11 +247,7 @@ exclude_lines =
 - Generated via `pytest --cov=app --cov-report=xml --cov-report=term-missing`
 - Consumed by CI and quality gates like Codecov or SonarCloud.
 
-**Tip:** To regenerate:
-```bash
-docker compose exec fastapi pytest --cov=app --cov-report=xml --cov-report=term-missing
-```
-
+*
 ---
 ### 7. SMTP Client Tests (`test_smtp_connection.py`)
 - ✅ Mocks SMTP login, TLS, and message sending
@@ -281,4 +339,3 @@ Tests added/validated:
 
 ---
 
-✅ Feature implemented, secured, tested, and ready for user-facing deployment.
