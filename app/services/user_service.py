@@ -4,8 +4,9 @@ import secrets
 from typing import Optional, Dict, List
 from pydantic import ValidationError
 from sqlalchemy import func, null, update, select
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 from app.dependencies import get_email_service, get_settings
 from app.models.user_model import User
 from app.schemas.user_schemas import UserCreate, UserUpdate
@@ -13,8 +14,10 @@ from app.utils.nickname_gen import generate_nickname
 from app.utils.security import generate_verification_token, hash_password, verify_password
 from uuid import UUID
 from app.services.email_service import EmailService
-from app.models.user_model import UserRole
+from app.models.user_model import UserRole, User
+from app.utils.validators import validate_user_update_fields
 import logging
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -26,6 +29,10 @@ class UserService:
             result = await session.execute(query)
             await session.commit()
             return result
+        except IntegrityError as e:
+            logger.error(f"Integrity error: {e}")
+            await session.rollback()
+            raise
         except SQLAlchemyError as e:
             logger.error(f"Database error: {e}")
             await session.rollback()
@@ -65,7 +72,7 @@ class UserService:
             new_user.nickname = new_nickname
             logger.info(f"User Role: {new_user.role}")
             user_count = await cls.count(session)
-            new_user.role = UserRole.ADMIN if user_count == 0 else UserRole.ANONYMOUS            
+            new_user.role = UserRole.ADMIN if user_count == 0 else UserRole.ANONYMOUS
             if new_user.role == UserRole.ADMIN:
                 new_user.email_verified = True
 
@@ -81,25 +88,34 @@ class UserService:
             return None
 
     @classmethod
-    async def update(cls, session: AsyncSession, user_id: UUID, update_data: Dict[str, str]) -> Optional[User]:
+    async def update(cls, session, user_id: UUID, update_data: Dict[str, str]) -> Optional[User]:
+        # Validate fields via Pydantic model (e.g., check email format, nickname length, etc.)
         try:
-            # validated_data = UserUpdate(**update_data).dict(exclude_unset=True)
-            validated_data = UserUpdate(**update_data).model_dump(exclude_unset=True)
-
-            if 'password' in validated_data:
-                validated_data['hashed_password'] = hash_password(validated_data.pop('password'))
-            query = update(User).where(User.id == user_id).values(**validated_data).execution_options(synchronize_session="fetch")
-            await cls._execute_query(session, query)
-            updated_user = await cls.get_by_id(session, user_id)
-            if updated_user:
-                session.refresh(updated_user)  # Explicitly refresh the updated user object
-                logger.info(f"User {user_id} updated successfully.")
-                return updated_user
-            else:
-                logger.error(f"User {user_id} not found after update attempt.")
+            UserUpdate(**update_data)
+        except ValidationError as e:
+            logger.error(f"Validation error during user {user_id}: {e}")
             return None
-        except Exception as e:  # Broad exception handling for debugging
-            logger.error(f"Error during user update: {e}")
+        # Remove any protected or null fields (e.g., role, id) before update
+        validated_data = validate_user_update_fields(update_data)
+        if not validated_data:
+            return None
+        # Prepare and execute the update query
+        query = update(User).where(User.id == user_id).values(**validated_data).execution_options(synchronize_session="fetch")
+        try:
+            result = await cls._execute_query(session, query)
+        except IntegrityError as ie:
+            # If a unique constraint is violated (e.g., email conflict), let the caller handle it
+            raise
+        if result is None:
+            return None
+        # Fetch the updated user and refresh to get latest data
+        updated_user = await cls.get_by_id(session, user_id)
+        if updated_user:
+            await session.refresh(updated_user)
+            logger.info(f"User {user_id} updated successfully.")
+            return updated_user
+        else:
+            logger.error(f"User {user_id} not found after update attempt.")
             return None
 
     @classmethod
@@ -121,7 +137,7 @@ class UserService:
     @classmethod
     async def register_user(cls, session: AsyncSession, user_data: Dict[str, str], get_email_service) -> Optional[User]:
         return await cls.create(session, user_data, get_email_service)
-    
+
 
     @classmethod
     async def login_user(cls, session: AsyncSession, email: str, password: str) -> Optional[User]:
@@ -188,7 +204,7 @@ class UserService:
         result = await session.execute(query)
         count = result.scalar()
         return count
-    
+
     @classmethod
     async def unlock_user_account(cls, session: AsyncSession, user_id: UUID) -> bool:
         user = await cls.get_by_id(session, user_id)
